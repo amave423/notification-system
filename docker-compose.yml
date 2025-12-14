@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # PostgreSQL для шлюза уведомлений
+  postgres-gateway:
+    image: postgres:13
+    environment:
+      POSTGRES_DB: notifications
+      POSTGRES_USER: notification_user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notification_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL для email сервиса
+  postgres-email:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: NotificationsDb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_email_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Elasticsearch 
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # MailHog для тестирования email
+  mailhog:
+    image: mailhog/mailhog:latest
+    ports:
+      - "1025:1025"  # SMTP порт
+      - "8025:8025"  # Web UI порт
+
+  # Шлюз уведомлений
+  notification-gateway:
+    build:
+      context: ./notification-main
+      dockerfile: Dockerfile.gateway
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres-gateway:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://notification_user:password@postgres-gateway:5432/notifications
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+    volumes:
+      - ./notification-main/src:/app/src
+    restart: unless-stopped
+
+  # Email сервис
+  email-service:
+    build:
+      context: ./email-notification-service-main
+      dockerfile: Dockerfile.email 
+    ports:
+      - "5130:8080"
+    depends_on:
+      postgres-email:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ConnectionStrings__DefaultConnection=Host=postgres-email;Database=NotificationsDb;Username=postgres;Password=pass
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+      - Smtp__Host=mailhog
+      - Smtp__Port=1025
+      - Smtp__From=noreply@yourapp.com
+    restart: unless-stopped
+
+  # SMS сервис
+  sms-service:
+    build:
+      context: ./SmsSenderService-master
+      dockerfile: Dockerfile.sms
+    ports:
+      - "5004:80"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - RabbitMQ__Host=rabbitmq
+      - RabbitMQ__Username=guest
+      - RabbitMQ__Password=guest
+    restart: unless-stopped
+
+  # Push сервис
+  push-service:
+    build:
+      context: ./PushService-main
+      dockerfile: Dockerfile.push
+    ports:
+      - "8001:8000"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      - RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+      - PUSHBULLET_API_KEY=dummy_key_for_testing
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  postgres_email_data:
+  es_data:

@@ -1,0 +1,22 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libpq-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY src/ ./src/
+
+ENV PYTHONPATH=/app/src:$PYTHONPATH
+
+RUN find /app/src -type d -name "__pycache__" -prune -o -type d -exec touch {}/__init__.py 2>/dev/null \; || true
+
+EXPOSE 8000
+
+CMD ["/app/start.sh"]
