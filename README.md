@@ -1,4 +1,4 @@
-# Notification System — единый обзор
+# Notification System
 
 Это монолитный набор микросервисов для отправки уведомлений (gateway + workers): Email Service, SMS Service, Push Service, RabbitMQ, PostgreSQL, Elasticsearch и тестовые утилиты (MailHog и скрипт тестирования).
 
