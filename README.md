@@ -1,6 +1,5 @@
 # Notification System — единый обзор
 
--------
 Это монолитный набор микросервисов для отправки уведомлений (gateway + workers): Email Service, SMS Service, Push Service, RabbitMQ, PostgreSQL, Elasticsearch и тестовые утилиты (MailHog и скрипт тестирования).
 
 Сервисы и порты
@@ -74,7 +73,7 @@ python test_all.py
 
 Кто делал
 -------------------
-email-notification-service-main - Козлов Данил
-notification-main - Гребенщиков Данил
-PushService-main - Казанцев Семён
-SmsSenderService-master - Антропов Артём
+- email-notification-service-main - Козлов Данил
+- notification-main - Гребенщиков Данил
+- PushService-main - Казанцев Семён
+- SmsSenderService-master - Антропов Артём
